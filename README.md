@@ -4,7 +4,6 @@ Aplicación para que campesinos del Llano Oriental reporten afectaciones en sus 
 
 Proyecto académico — Politécnico Grancolombiano, Tecnología en Desarrollo de Software, desarrollado con Scrum.
 
-| | |
 |---|---|
 | **Docente** | Edilberto Torres Ortiz |
 | **Scrum Master** | Nicolás Abril Cárdenas |
