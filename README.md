@@ -3,7 +3,7 @@
 Aplicación para que campesinos del Llano Oriental reporten afectaciones en sus cultivos de plátano con fotos y ubicación, y para que un profesional agrónomo las diagnostique y haga seguimiento hasta resolverlas.
 
 Proyecto académico — Politécnico Grancolombiano, Tecnología en Desarrollo de Software, desarrollado con Scrum.
-
+|||
 |---|---|
 | **Docente** | Edilberto Torres Ortiz |
 | **Scrum Master** | Nicolás Abril Cárdenas |
