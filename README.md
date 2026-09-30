@@ -22,7 +22,7 @@ Sprints 0 a 3 completados. Historias entregadas (todas en estado "Completada" en
 
 Candidata para el Sprint 4: exportar el panel de estadísticas a PDF o Excel.
 
-> **Nota:** el repositorio contiene hoy la lógica de negocio y la base de datos, con sus pruebas unitarias y un recorrido de demostración en consola. La interfaz web (API y pantallas) se agrega sobre esta misma lógica.
+> **Nota:** el repositorio contiene la lógica de negocio y la base de datos, con sus pruebas unitarias, un recorrido en consola y una demo web de demostración. La interfaz web de producción (API y pantallas definitivas) se construye sobre esta misma lógica.
 
 ## Requisitos
 
@@ -47,6 +47,14 @@ python -m pip install -r requirements.txt
 ## Cómo correr el proyecto
 
 Todos los comandos se ejecutan desde la carpeta raíz (la que contiene `app`, `tests` y `schema.sql`).
+
+Para ver la **demo web** (pantallas de campesino y profesional, sobre la misma lógica):
+
+```bash
+python demo_web.py          # abrir http://localhost:8000
+```
+
+Usuarios de ejemplo: `carlos@finca.co` (campesino) y `laura@agro.co` (profesional), contraseña `clave1234`. Usa base de datos en memoria; al reiniciar vuelve a los datos de ejemplo.
 
 Para ver el flujo completo en la consola (registro → reporte → diagnóstico → notificación → cierre → estadísticas):
 
@@ -100,8 +108,10 @@ Practicas-Proyecto/
 ├── tests/                   # Pruebas unitarias con pytest, una por área
 ├── docs/                    # Documentación del equipo
 │   ├── DoD_Control_Plagas_Platano.pdf   # Definition of Done
-│   └── ESTANDAR_DOCUMENTACION.md        # Estándar de comentarios y docstrings
+│   ├── ESTANDAR_DOCUMENTACION.md        # Estándar de comentarios y docstrings (v1.1)
+│   └── ACTA_EPS.md                      # Acta de Entrega Parcial de Software
 ├── demo.py                  # Recorrido de demostración en consola
+├── demo_web.py              # Demo web (http.server) sobre la lógica de app/
 ├── requirements.txt / pytest.ini
 └── .gitignore
 ```
