@@ -1,7 +1,8 @@
 # Estándar de comentarios y documentación del código
 
 **Proyecto:** Sistema Web Control de Plagas en Plátano  
-**Aplica a:** todo el código Python y SQL del repositorio. Es parte del Definition of Done.
+**Aplica a:** todo el código Python y SQL del repositorio. Es parte del Definition of Done.  
+**Versión:** 1.1 – 30 de septiembre de 2026 (ver [Historial de cambios](#historial-de-cambios))
 
 ## 1. Idioma y nombres
 
@@ -71,7 +72,24 @@ Todos los parámetros y retornos de funciones públicas llevan anotaciones (`usu
 
 Formato: `US<N>: qué se hizo`, en presente e imperativo, por ejemplo `US9: filtrar estadísticas por zona`.
 
-## 10. Lista de revisión rápida
+## 10. Interfaz web de demostración
+
+Aplica a `demo_web.py` y a cualquier código que exponga la lógica de `app/` por HTTP.
+
+- La capa web **no contiene reglas de negocio**: solo lee datos del formulario, llama a una función de `app/` y muestra el resultado. Si una regla falta, se agrega en `app/` con su prueba, nunca en el manejador.
+- Todo texto que venga del usuario o de la base de datos se escapa con `html.escape` antes de ponerse en el HTML.
+- Los `ErrorDominio` se capturan en un solo lugar y su mensaje se muestra tal cual (sección 7); los demás errores no se ocultan.
+- Cada ruta (`/reportar`, `/diagnosticar`, …) se documenta en el docstring del módulo con la historia que ejercita.
+- El código de demostración usa base de datos en memoria y datos de ejemplo creados por una función (`sembrar`); no se suben archivos `.db` al repositorio.
+- La demo no es un entregable de producción: la sesión por URL y la ausencia de carga real de fotos se declaran como limitaciones en el Acta EPS.
+
+## 11. Documentos de entrega
+
+- Las actas de entrega parcial (`ACTA_EPS.md`) se guardan en `docs/`, en español, con las secciones: datos generales, alcance, evidencias verificables (comando y resultado), cumplimiento del DoD, limitaciones conocidas y firmas.
+- Toda cifra del acta (pruebas, historias) debe poder reproducirse con un comando indicado en el mismo documento.
+- Si una entrega cambia la instalación, la ejecución o el uso, el README se actualiza en el mismo commit (criterio 10 del DoD).
+
+## 12. Lista de revisión rápida
 
 - [ ] Docstring de módulo con la historia
 - [ ] Docstring en funciones públicas, con `Raises:` si aplica
@@ -79,3 +97,12 @@ Formato: `US<N>: qué se hizo`, en presente e imperativo, por ejemplo `US9: filt
 - [ ] Comentarios que explican el porqué
 - [ ] SQL parametrizado
 - [ ] Pruebas nuevas o actualizadas y `python -m pytest` en verde
+- [ ] Código web sin reglas de negocio y con texto escapado (sección 10)
+- [ ] README y documentos de entrega actualizados (sección 11)
+
+## Historial de cambios
+
+| Versión | Fecha | Cambio |
+|---|---|---|
+| 1.0 | 29 de septiembre de 2026 | Versión inicial (secciones 1 a 10 originales) |
+| 1.1 | 30 de septiembre de 2026 | Se agregan la sección 10 (interfaz web de demostración) y la 11 (documentos de entrega); la lista de revisión pasa a ser la sección 12 y suma dos ítems |
