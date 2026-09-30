@@ -4,18 +4,33 @@ Uso:
     python demo_web.py        # abre http://localhost:8000
 
 Usa una base de datos en memoria con datos de ejemplo. Es solo una demostración:
-la sesión viaja en la URL (?u=id) y no hay carga real de fotos.
+la sesión viaja en la URL (?u=id). Las fotos que sube el campesino (JPG o PNG) se guardan
+en una carpeta temporal que se borra al cerrar la demo.
+
+Rutas: /login (US1), /reportar (US2, US3), /leida (US7), /revisar y /diagnosticar (US5),
+/resolver (US8), /panel (US4, US6, US9) y /fotos/<archivo> para mostrar las imágenes.
 """
+import atexit
 import html
+import re
+import shutil
 import sys
+import tempfile
+import uuid
+from email import policy
+from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 from app import (db, diagnosticos, estadisticas, notificaciones, reportes,
                  usuarios)
-from app.errores import ErrorDominio
+from app.errores import ErrorDominio, ErrorValidacion
 
 CONN = db.conectar()
+CARPETA_FOTOS = Path(tempfile.mkdtemp(prefix="plagas_fotos_"))
+atexit.register(shutil.rmtree, CARPETA_FOTOS, ignore_errors=True)
+MAX_BYTES = 10 * 1024 * 1024  # tope de la petición completa (todas las fotos juntas)
 CSS = ("body{font-family:system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;"
        "color:#1f2a1f}h1{color:#2e6b2e}.card{border:1px solid #cfdccf;border-radius:8px;"
        "padding:.8rem 1rem;margin:.6rem 0;background:#f7fbf7}.msg{background:#fff3cd;padding:.6rem;"
@@ -35,6 +50,35 @@ def sembrar() -> None:
                            "Vereda La Esperanza", ["hoja1.jpg"], "Sigatoka", "Villavicencio")
     reportes.crear_reporte(CONN, carlos, "Tallos con galerías y pudrición", "4.15, -73.63",
                            ["tallo.png"], "Picudo negro", "Acacías")
+
+
+def detectar_extension(datos: bytes) -> str:
+    """Devuelve la extensión real del archivo según sus primeros bytes.
+
+    Se mira el contenido y no el nombre: un .exe renombrado a .jpg no debe pasar.
+
+    Raises:
+        ErrorValidacion: El archivo no es una imagen JPG o PNG.
+    """
+    if datos.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if datos.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    raise ErrorValidacion("Solo se permiten imágenes .jpg, .jpeg o .png.")
+
+
+def miniaturas(reporte_id: int) -> str:
+    """Muestra las fotos de un reporte; si el archivo no existe, solo su nombre."""
+    piezas = []
+    for fila in CONN.execute("SELECT nombre_archivo FROM foto WHERE reporte_id = ?", (reporte_id,)):
+        nombre = fila["nombre_archivo"]
+        if (CARPETA_FOTOS / nombre).is_file():
+            piezas.append(f'<a href="/fotos/{nombre}" target=_blank><img src="/fotos/{nombre}" '
+                          f'style="height:90px;border-radius:6px;margin:.3rem .3rem 0 0"></a>')
+        else:
+            # Los reportes de ejemplo solo tienen el nombre, sin archivo real.
+            piezas.append(f"<small>📷 {html.escape(nombre)} (ejemplo)</small> ")
+    return "".join(piezas)
 
 
 def pagina(cuerpo: str, msg: str = "") -> bytes:
@@ -57,7 +101,8 @@ def vista_campesino(u) -> str:
     uid = u["id"]
     filas = "".join(
         f'<div class="card">#{r["id"]} {html.escape(r["descripcion"])} — '
-        f'<span class="tag">{r["estado"]}</span><br><small>{html.escape(r["ubicacion"])}</small></div>'
+        f'<span class="tag">{r["estado"]}</span><br><small>{html.escape(r["ubicacion"])}</small>'
+        f'<br>{miniaturas(r["id"])}</div>'
         for r in reportes.listar_mis_reportes(CONN, uid)) or "<p>Sin reportes.</p>"
     notas = "".join(
         f'<div class="card">{"🔔" if not n["leida"] else "✔"} {html.escape(n["mensaje"])}'
@@ -66,10 +111,12 @@ def vista_campesino(u) -> str:
            f'</form>' if not n["leida"] else "") + "</div>"
         for n in notificaciones.listar_notificaciones(CONN, uid)) or "<p>Sin notificaciones.</p>"
     return (f'<h2>Hola, {html.escape(u["nombre"])} (campesino)</h2>'
-            f'<div class="card"><h3>Nuevo reporte (US2, US3)</h3><form method=post action=/reportar>'
+            f'<div class="card"><h3>Nuevo reporte (US2, US3)</h3><form method=post '
+            f'action="/reportar?u={uid}" enctype="multipart/form-data">'
             f'<input type=hidden name=u value={uid}>Descripción<textarea name=descripcion></textarea>'
             f'Ubicación (dirección o "lat, lon")<input name=ubicacion>'
-            f'Foto (nombre de archivo .jpg/.png)<input name=foto value=foto.jpg>'
+            f'Fotos de la afectación (JPG o PNG, máx. 10 MB en total)'
+            f'<input type=file name=fotos accept="image/png,image/jpeg" multiple>'
             f'Tipo de plaga<input name=tipo_plaga>Zona<input name=zona><button>Enviar reporte</button>'
             f'</form></div><h3>Mis reportes (US6)</h3>{filas}<h3>Notificaciones (US7)</h3>{notas}'
             f'<p><a href=/>Salir</a></p>')
@@ -84,7 +131,8 @@ def vista_profesional(u) -> str:
 
     pend = "".join(
         f'<div class="card">#{r["id"]} {html.escape(r["descripcion"])} '
-        f'<small>({html.escape(r["ubicacion"])})</small> {boton("/revisar", r["id"], "Iniciar revisión")}'
+        f'<small>({html.escape(r["ubicacion"])})</small><br>{miniaturas(r["id"])}<br>'
+        f'{boton("/revisar", r["id"], "Iniciar revisión")}'
         f'<form method=post action=/diagnosticar><input type=hidden name=u value={uid}>'
         f'<input type=hidden name=r value={r["id"]}>Diagnóstico<input name=texto>'
         f'Recomendación<input name=recomendacion><button>Diagnosticar</button></form></div>'
@@ -94,7 +142,7 @@ def vista_profesional(u) -> str:
                          "IN ('En revisión','Diagnosticado') ORDER BY id").fetchall()
     seguimiento = "".join(
         f'<div class="card">#{r["id"]} {html.escape(r["descripcion"])} — '
-        f'<span class="tag">{r["estado"]}</span>'
+        f'<span class="tag">{r["estado"]}</span><br>{miniaturas(r["id"])}<br>'
         + (boton("/resolver", r["id"], "Marcar resuelto") if r["estado"] == "Diagnosticado" else
            '<form method=post action=/diagnosticar><input type=hidden name=u value=' + str(uid) +
            '><input type=hidden name=r value=' + str(r["id"]) + '>Diagnóstico<input name=texto>'
@@ -116,6 +164,44 @@ class Manejador(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(cuerpo)
 
+    def _enviar_foto(self, archivo: Path) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png" if archivo.suffix == ".png" else "image/jpeg")
+        self.end_headers()
+        self.wfile.write(archivo.read_bytes())
+
+    def _leer_formulario(self) -> tuple[dict[str, str], list[bytes]]:
+        """Lee el cuerpo del POST (normal o con archivos) y devuelve (campos, fotos).
+
+        Raises:
+            ErrorValidacion: La petición supera el tamaño máximo.
+        """
+        largo = int(self.headers.get("Content-Length", 0))
+        if largo > MAX_BYTES:
+            # Se descarta el cuerpo para no dejar la conexión a medias.
+            while largo > 0:
+                leido = self.rfile.read(min(65536, largo))
+                if not leido:
+                    break
+                largo -= len(leido)
+            raise ErrorValidacion("Las fotos pesan demasiado: el máximo es 10 MB en total.")
+        cuerpo = self.rfile.read(largo)
+        tipo = self.headers.get("Content-Type", "")
+        if not tipo.startswith("multipart/form-data"):
+            return {k: v[0] for k, v in parse_qs(cuerpo.decode()).items()}, []
+        # El módulo "cgi" se eliminó en Python 3.13, por eso se usa "email" para leer el formulario.
+        mensaje = BytesParser(policy=policy.default).parsebytes(
+            b"Content-Type: " + tipo.encode() + b"\r\n\r\n" + cuerpo)
+        campos: dict[str, str] = {}
+        fotos: list[bytes] = []
+        for parte in mensaje.iter_parts():
+            datos = parte.get_payload(decode=True) or b""
+            if parte.get_filename() is None:
+                campos[parte.get_param("name", header="content-disposition")] = datos.decode("utf-8")
+            elif datos:  # un campo de archivo vacío significa que no eligió foto
+                fotos.append(datos)
+        return campos, fotos
+
     def _volver(self, uid: int, msg: str = "") -> None:
         self.send_response(303)
         self.send_header("Location", f"/panel?u={uid}&msg={quote(msg)}")
@@ -124,6 +210,13 @@ class Manejador(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         url = urlparse(self.path)
         q = parse_qs(url.query)
+        # Solo nombres generados por la demo: evita que se pida un archivo fuera de la carpeta.
+        foto = re.fullmatch(r"/fotos/([0-9a-f]{32}\.(?:jpg|png))", url.path)
+        if foto:
+            archivo = CARPETA_FOTOS / foto.group(1)
+            if archivo.is_file():
+                return self._enviar_foto(archivo)
+            return self._responder(pagina("<p>Foto no encontrada.</p>"), 404)
         if url.path == "/panel" and "u" in q:
             u = usuarios.obtener_usuario(CONN, int(q["u"][0]))
             vista = vista_campesino if u["rol"] == "campesino" else vista_profesional
@@ -131,18 +224,26 @@ class Manejador(BaseHTTPRequestHandler):
         self._responder(pagina(vista_login(), parse_qs(url.query).get("msg", [""])[0]))
 
     def do_POST(self) -> None:
-        largo = int(self.headers.get("Content-Length", 0))
-        f = {k: v[0] for k, v in parse_qs(self.rfile.read(largo).decode()).items()}
-        ruta = self.path
+        url = urlparse(self.path)
+        # El formulario con fotos también lleva ?u= en la URL, por si el cuerpo no se puede leer.
+        uid_url = parse_qs(url.query).get("u", [None])[0]
+        f: dict[str, str] = {}
         try:
+            f, fotos = self._leer_formulario()
+            ruta = url.path
             if ruta == "/login":
                 u = usuarios.iniciar_sesion(CONN, f.get("email", ""), f.get("password", ""))
                 return self._volver(u["id"], f"Bienvenido/a, {u['nombre']}.")
-            uid, rid = int(f["u"]), int(f.get("r", 0))
+            uid, rid = int(f.get("u") or uid_url), int(f.get("r", 0))
             if ruta == "/reportar":
+                # Nombre generado por la demo: nunca se usa el que trae el archivo.
+                nombres = [uuid.uuid4().hex + detectar_extension(d) for d in fotos]
                 n = reportes.crear_reporte(CONN, uid, f.get("descripcion", ""), f.get("ubicacion", ""),
-                                           [f.get("foto", "")], f.get("tipo_plaga"), f.get("zona"))
-                msg = f"Reporte #{n} enviado."
+                                           nombres, f.get("tipo_plaga"), f.get("zona"))
+                # Se escribe en disco solo si el reporte fue válido: así no quedan fotos huérfanas.
+                for nombre, datos in zip(nombres, fotos):
+                    (CARPETA_FOTOS / nombre).write_bytes(datos)
+                msg = f"Reporte #{n} enviado con {len(nombres)} foto(s)."
             elif ruta == "/leida":
                 notificaciones.marcar_leida(CONN, int(f["n"]), uid)
                 msg = "Notificación marcada como leída."
@@ -161,8 +262,9 @@ class Manejador(BaseHTTPRequestHandler):
             self._volver(uid, msg)
         except ErrorDominio as e:
             # Los errores de negocio están redactados para mostrarse tal cual (estándar §7).
-            if "u" in f:
-                return self._volver(int(f["u"]), f"⚠ {e}")
+            uid = f.get("u") or uid_url
+            if uid:
+                return self._volver(int(uid), f"⚠ {e}")
             self.send_response(303)
             self.send_header("Location", f"/?msg={quote('⚠ ' + str(e))}")
             self.end_headers()
