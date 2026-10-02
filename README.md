@@ -8,7 +8,7 @@ Proyecto académico — Politécnico Grancolombiano, Tecnología en Desarrollo d
 | **Docente** | Edilberto Torres Ortiz |
 | **Scrum Master** | Nicolás Abril Cárdenas |
 | **Product Owner** | Juan Miguel Parra Garzón |
-| **Equipo de desarrollo** | Santiago Cortez Mojica |
+| **Equipo de desarrollo** | Santiago Cortes Mojica |
 
 ## Estado del proyecto
 
